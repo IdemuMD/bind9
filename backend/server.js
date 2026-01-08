@@ -16,6 +16,9 @@ const TOKEN_EXPIRY = '1h'; // Token expires in 1 hour
 app.use(express.json());
 app.use(cors());
 
+// Serve static frontend files
+app.use(express.static(path.join(__dirname, '../frontend')));
+
 // File to store users (in production, use a proper database)
 const USERS_FILE = path.join(__dirname, 'users.json');
 
@@ -387,7 +390,7 @@ app.get('/health', (req, res) => {
 /**
  * API documentation endpoint
  */
-app.get('/', (req, res) => {
+app.get('/api', (req, res) => {
     res.json({
         name: 'JWT Authentication API',
         version: '1.0.0',
@@ -434,7 +437,8 @@ initializeAdminUser();
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log(`API documentation: http://localhost:${PORT}/`);
+    console.log(`Frontend: http://YOUR_VM_IP:${PORT}/`);
+    console.log(`API documentation: http://YOUR_VM_IP:${PORT}/api`);
     console.log(`JWT_SECRET: ${JWT_SECRET}`);
     console.log(`Token expiry: ${TOKEN_EXPIRY}`);
 });
