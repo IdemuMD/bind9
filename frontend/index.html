@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT Authentication Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: #6c757d;
+        }
+
+        button.danger {
+            background: #dc3545;
+        }
+
+        .token-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+
+        .response {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 13px;
+        }
+
+        .success {
+            color: #28a745;
+        }
+
+        .error {
+            color: #dc3545;
+        }
+
+        .info {
+            color: #17a2b8;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .user-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+
+        .role-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .role-badge.admin {
+            background: #dc3545;
+            color: white;
+        }
+
+        .role-badge.user {
+            background: #28a745;
+            color: white;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .nav-tab.active {
+            background: white;
+            color: #667eea;
+        }
+
+        .curl-command {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin-bottom: 10px;
+        }
+
+        .section-title {
+            color: #333;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 JWT Authentication Demo</h1>
+
+        <!-- Navigation -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showSection('auth')">Authentication</button>
+            <button class="nav-tab" onclick="showSection('protected')">Protected Routes</button>
+            <button class="nav-tab" onclick="showSection('curl')">cURL Examples</button>
+        </div>
+
+        <!-- Authentication Section -->
+        <div id="auth" class="section active">
+            <div class="card">
+                <h2>Login</h2>
+                <div id="loginStatus" class="status"></div>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" placeholder="Enter username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" placeholder="Enter password" required>
+                    </div>
+                    <button type="submit">Login</button>
+                    <button type="button" class="secondary" onclick="registerUser()">Register</button>
+                </form>
+            </div>
+
+            <div class="card" id="tokenCard" style="display: none;">
+                <h2>JWT Token</h2>
+                <div class="user-info">
+                    <span id="userDisplay"></span>
+                    <span id="roleBadge" class="role-badge"></span>
+                </div>
+                <label>Your JWT Token:</label>
+                <div class="token-display" id="tokenDisplay"></div>
+                <button class="danger" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <!-- Protected Routes Section -->
+        <div id="protected" class="section">
+            <div class="card">
+                <h2>Test Protected Endpoints</h2>
+                <div id="protectedStatus" class="status"></div>
+                <button onclick="accessProtected()">Access /protected</button>
+                <button onclick="accessProfile()">Access /profile</button>
+                <button onclick="accessAdmin()">Access /admin</button>
+                <button onclick="refreshToken()">Refresh Token</button>
+            </div>
+
+            <div class="card" id="responseCard" style="display: none;">
+                <h2>Response</h2>
+                <div class="response" id="responseDisplay"></div>
+            </div>
+        </div>
+
+        <!-- cURL Examples Section -->
+        <div id="curl" class="section">
+            <div class="card">
+                <h2>cURL Command Examples</h2>
+                
+                <p class="section-title">1. Register a User</p>
+                <div class="curl-command">curl -X POST http://YOUR_VM_IP:3000/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "newuser", "password": "newpassword123"}'</div>
+
+                <p class="section-title">2. Login (Get JWT Token)</p>
+                <div class="curl-command">curl -X POST http://YOUR_VM_IP:3000/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "testuser", "password": "test123"}'</div>
+
+                <p class="section-title">3. Access Protected Route</p>
+                <div class="curl-command">curl -X GET http://YOUR_VM_IP:3000/protected \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"</div>
+
+                <p class="section-title">4. Access Admin Route</p>
+                <div class="curl-command">curl -X GET http://YOUR_VM_IP:3000/admin \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"</div>
+
+                <p class="section-title">5. Get User Profile</p>
+                <div class="curl-command">curl -X GET http://YOUR_VM_IP:3000/profile \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"</div>
+
+                <p class="section-title">6. Refresh Token</p>
+                <div class="curl-command">curl -X POST http://YOUR_VM_IP:3000/refresh \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let jwtToken = localStorage.getItem('jwt_token');
+        let currentUser = JSON.parse(localStorage.getItem('current_user') || 'null');
+
+        // Initialize
+        if (jwtToken && currentUser) {
+            showLoggedInState();
+        }
+
+        // Show section
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Show status message
+        function showStatus(elementId, message, isError = false) {
+            const status = document.getElementById(elementId);
+            status.textContent = message;
+            status.className = `status show ${isError ? 'error' : 'success'}`;
+        }
+
+        // Login
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    jwtToken = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem('jwt_token', jwtToken);
+                    localStorage.setItem('current_user', JSON.stringify(currentUser));
+                    showLoggedInState();
+                    showStatus('loginStatus', `Welcome ${data.user.username}! Login successful.`);
+                } else {
+                    showStatus('loginStatus', data.message || 'Login failed', true);
+                }
+            } catch (error) {
+                showStatus('loginStatus', 'Connection error. Make sure the server is running.', true);
+            }
+        });
+
+        // Register
+        async function registerUser() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                showStatus('loginStatus', 'Please enter username and password', true);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatus('loginStatus', `User registered! Now login with these credentials.`);
+                } else {
+                    showStatus('loginStatus', data.message || 'Registration failed', true);
+                }
+            } catch (error) {
+                showStatus('loginStatus', 'Connection error', true);
+            }
+        }
+
+        // Logout
+        function logout() {
+            jwtToken = null;
+            currentUser = null;
+            localStorage.removeItem('jwt_token');
+            localStorage.removeItem('current_user');
+            document.getElementById('tokenCard').style.display = 'none';
+            document.getElementById('loginForm').reset();
+            showStatus('loginStatus', 'Logged out successfully.');
+        }
+
+        // Show logged in state
+        function showLoggedInState() {
+            document.getElementById('tokenCard').style.display = 'block';
+            document.getElementById('userDisplay').textContent = `Logged in as: ${currentUser.username}`;
+            document.getElementById('roleBadge').textContent = currentUser.role;
+            document.getElementById('roleBadge').className = `role-badge ${currentUser.role}`;
+            document.getElementById('tokenDisplay').textContent = jwtToken;
+        }
+
+        // Show response
+        function showResponse(data, isError = false) {
+            document.getElementById('responseCard').style.display = 'block';
+            const display = document.getElementById('responseDisplay');
+            display.textContent = JSON.stringify(data, null, 2);
+            display.className = `response ${isError ? 'error' : ''}`;
+        }
+
+        // Check if logged in
+        function checkAuth() {
+            if (!jwtToken) {
+                showStatus('protectedStatus', 'Please login first', true);
+                return false;
+            }
+            return true;
+        }
+
+        // Access protected endpoint
+        async function accessProtected() {
+            if (!checkAuth()) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/protected`, {
+                    headers: { 'Authorization': `Bearer ${jwtToken}` }
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: 'Connection error' }, true);
+            }
+        }
+
+        // Access profile
+        async function accessProfile() {
+            if (!checkAuth()) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/profile`, {
+                    headers: { 'Authorization': `Bearer ${jwtToken}` }
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: 'Connection error' }, true);
+            }
+        }
+
+        // Access admin
+        async function accessAdmin() {
+            if (!checkAuth()) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/admin`, {
+                    headers: { 'Authorization': `Bearer ${jwtToken}` }
+                });
+                const data = await response.json();
+                showResponse(data, !response.ok);
+            } catch (error) {
+                showResponse({ error: 'Connection error' }, true);
+            }
+        }
+
+        // Refresh token
+        async function refreshToken() {
+            if (!checkAuth()) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/refresh`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${jwtToken}` }
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    jwtToken = data.token;
+                    localStorage.setItem('jwt_token', jwtToken);
+                    document.getElementById('tokenDisplay').textContent = jwtToken;
+                    showResponse({ message: 'Token refreshed!', token: data.token });
+                } else {
+                    showResponse(data, true);
+                }
+            } catch (error) {
+                showResponse({ error: 'Connection error' }, true);
+            }
+        }
+    </script>
+</body>
+</html>
+
