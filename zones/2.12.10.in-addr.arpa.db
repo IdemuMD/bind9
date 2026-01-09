@@ -1,0 +1,18 @@
+;
+; Reverse zone file for 10.12.2.0/24
+;
+$TTL 86400
+@       IN      SOA     ns2.ikt-fag.no. admin.ikt-fag.no. (
+                        2024011501  ; Serial
+                        3600        ; Refresh (1 hour)
+                        1800        ; Retry (30 minutes)
+                        604800      ; Expire (1 week)
+                        86400 )     ; Minimum TTL (1 day)
+
+; Name servers
+@       IN      NS      ns2.ikt-fag.no.
+
+; PTR records
+10      IN      PTR     ns2.ikt-fag.no.
+106     IN      PTR     guide.ikt-fag.no.
+

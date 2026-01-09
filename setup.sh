@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# JWT Authentication API - Setup Script for Proxmox VM (Ubuntu)
-# This script sets up the complete JWT authentication system
+# BIND9 DNS Server Setup Script
+# Secondary DNS server for ikt-fag.no zone
+# This script configures ns2.ikt-fag.no
 
 set -e  # Exit on error
 
@@ -13,14 +14,20 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  JWT Authentication API - Setup${NC}"
-echo -e "${BLUE}  For Proxmox VM (Ubuntu)${NC}"
+echo -e "${BLUE}  BIND9 DNS Server Setup${NC}"
+echo -e "${BLUE}  ns2.ikt-fag.no${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
-# Variables
-PROJECT_DIR="/opt/jwt-auth-api"
-NODE_VERSION="20"
+# Configuration Variables
+DNS_SERVER_NAME="ns2.ikt-fag.no"
+DNS_SERVER_IP="10.12.2.10"
+ZONE_NAME="ikt-fag.no"
+WEB_SERVER_IP="10.12.2.106"
+WEBSITE_NAME="guide"
+WEB_URL="${WEBSITE_NAME}.${ZONE_NAME}"
+WWW_URL="www.${ZONE_NAME}"
+PRIMARY_DNS_IP=""  # To be configured by user - school's DNS
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then 
@@ -31,131 +38,163 @@ fi
 echo -e "${YELLOW}Step 1: Updating system...${NC}"
 apt-get update && apt-get upgrade -y
 
-echo -e "${YELLOW}Step 2: Installing Node.js...${NC}"
-# Install curl if not present
-apt-get install -y curl
+echo -e "${YELLOW}Step 2: Installing BIND9...${NC}"
+apt-get install -y bind9 bind9utils bind9-doc dnsutils
 
-# Install Node.js using NodeSource repository
-curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
-apt-get install -y nodejs
+echo -e "${YELLOW}Step 3: Configuring BIND9 options...${NC}"
+mkdir -p /var/cache/bind
+mkdir -p /var/lib/bind
+mkdir -p /etc/bind/zones
 
-# Verify installation
-node --version
-npm --version
-
-echo -e "${YELLOW}Step 3: Creating project directory...${NC}"
-mkdir -p $PROJECT_DIR/backend
-mkdir -p $PROJECT_DIR/frontend
-
-echo -e "${YELLOW}Step 4: Copying project files...${NC}"
-# Copy backend files
-cp backend/package.json $PROJECT_DIR/backend/
-cp backend/server.js $PROJECT_DIR/backend/
-cp backend/users.json $PROJECT_DIR/backend/ 2>/dev/null || echo "No users.json to copy"
-
-# Copy frontend files
-cp frontend/index.html $PROJECT_DIR/frontend/
-
-echo -e "${YELLOW}Step 5: Installing dependencies...${NC}"
-cd $PROJECT_DIR/backend
-npm install
-
-echo -e "${YELLOW}Step 6: Setting up environment variables...${NC}"
-# Create environment file
-cat > $PROJECT_DIR/backend/.env << EOF
-# JWT Authentication API Environment Configuration
-# IMPORTANT: Change these values in production!
-
-# Secret key for JWT signing (USE A STRONG RANDOM KEY IN PRODUCTION!)
-JWT_SECRET=$(openssl rand -hex 64)
-
-# Server port
-PORT=3000
-
-# Token expiry time (e.g., 1h, 24h, 7d)
-TOKEN_EXPIRY=1h
+# Create named.conf.options
+cat > /etc/bind/named.conf.options << EOF
+options {
+    directory "/var/cache/bind";
+    dnssec-validation auto;
+    auth-nxdomain no;    # conform to RFC1035
+    listen-on { 127.0.0.1; ${DNS_SERVER_IP}; };
+    listen-on-v6 { none; };
+    allow-query { 127.0.0.1; 10.12.2.0/24; };
+    allow-recursion { 127.0.0.1; 10.12.2.0/24; };
+    forwarders {
+        # Add school DNS servers here - REPLACE with actual IPs
+        # 8.8.8.8;
+        # 8.8.4.4;
+    };
+    version "not disclosed";
+    hostname "";
+    server-id "";
+};
 EOF
 
-echo -e "${YELLOW}Step 7: Creating systemd service...${NC}"
-# Create systemd service file
-cat > /etc/systemd/system/jwt-auth-api.service << EOF
-[Unit]
-Description=JWT Authentication API
-Documentation=https://github.com/yourusername/jwt-auth-api
-After=network.target
+echo -e "${YELLOW}Step 4: Configuring local zones...${NC}"
+# Create named.conf.local
+cat > /etc/bind/named.conf.local << EOF
+//
+// Do any local configuration here
+//
 
-[Service]
-Type=simple
-User=www-data
-Group=www-data
-WorkingDirectory=$PROJECT_DIR/backend
-ExecStart=/usr/bin/node server.js
-Restart=on-failure
-RestartSec=5
-Environment=NODE_ENV=production
-EnvironmentFile=$PROJECT_DIR/backend/.env
+// Consider adding the 1918 zones here, if they are not used in your
+// organization
+// include "/etc/bind/zones.rfc1918";
 
-# Security hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-ReadWritePaths=$PROJECT_DIR/backend
+# Zone: ${ZONE_NAME}
+# This is a primary (master) zone for internal use
+zone "${ZONE_NAME}" {
+    type master;
+    file "/var/lib/bind/${ZONE_NAME}.db";
+    allow-transfer { none; };
+    allow-update { none; };
+};
 
-[Install]
-WantedBy=multi-user.target
+# Reverse zone for 10.12.2.0/24
+zone "2.12.10.in-addr.arpa" {
+    type master;
+    file "/var/lib/bind/2.12.10.in-addr.arpa.db";
+    allow-transfer { none; };
+    allow-update { none; };
+};
 EOF
 
-echo -e "${YELLOW}Step 8: Configuring firewall...${NC}"
-# Install UFW if not present
+echo -e "${YELLOW}Step 5: Creating forward zone file...${NC}"
+# Create forward zone file
+cat > /var/lib/bind/${ZONE_NAME}.db << EOF
+;
+; BIND9 Zone file for ${ZONE_NAME}
+; Created by setup script
+;
+\$TTL 86400
+@       IN      SOA     ${DNS_SERVER_NAME}. admin.${ZONE_NAME}. (
+                        $(date +%Y%m%d)01  ; Serial
+                        3600            ; Refresh (1 hour)
+                        1800            ; Retry (30 minutes)
+                        604800          ; Expire (1 week)
+                        86400 )         ; Minimum TTL (1 day)
+
+; Name servers
+@       IN      NS      ${DNS_SERVER_NAME}.
+
+; A records
+@       IN      A       ${DNS_SERVER_IP}
+${DNS_SERVER_NAME}.    IN      A       ${DNS_SERVER_IP}
+${WEBSITE_NAME}.       IN      A       ${WEB_SERVER_IP}
+
+; CNAME records
+www     IN      CNAME   ${WEBSITE_NAME}.
+
+; MX records (if needed)
+; @       IN      MX      10      mail.${ZONE_NAME}.
+; mail    IN      A       ${DNS_SERVER_IP}
+EOF
+
+echo -e "${YELLOW}Step 6: Creating reverse zone file...${NC}"
+# Create reverse zone file
+cat > /var/lib/bind/2.12.10.in-addr.arpa.db << EOF
+;
+; Reverse zone file for 10.12.2.0/24
+;
+\$TTL 86400
+@       IN      SOA     ${DNS_SERVER_NAME}. admin.${ZONE_NAME}. (
+                        $(date +%Y%m%d)01  ; Serial
+                        3600            ; Refresh (1 hour)
+                        1800            ; Retry (30 minutes)
+                        604800          ; Expire (1 week)
+                        86400 )         ; Minimum TTL (1 day)
+
+; Name servers
+@       IN      NS      ${DNS_SERVER_NAME}.
+
+; PTR records
+10      IN      PTR     ${DNS_SERVER_NAME}.
+106     IN      PTR     ${WEBSITE_NAME}.${ZONE_NAME}.
+EOF
+
+echo -e "${YELLOW}Step 7: Setting permissions...${NC}"
+chown -R bind:bind /var/lib/bind/
+chown -R bind:bind /var/cache/bind/
+chmod 640 /var/lib/bind/*.db
+
+echo -e "${YELLOW}Step 8: Testing BIND9 configuration...${NC}"
+named-checkconf
+named-checkzone ${ZONE_NAME} /var/lib/bind/${ZONE_NAME}.db
+named-checkzone 2.12.10.in-addr.arpa /var/lib/bind/2.12.10.in-addr.arpa.db
+
+echo -e "${YELLOW}Step 9: Starting BIND9 service...${NC}"
+systemctl enable bind9
+systemctl start bind9
+systemctl status bind9
+
+echo -e "${YELLOW}Step 10: Configuring firewall...${NC}"
 apt-get install -y ufw
-
-# Allow SSH
 ufw allow ssh
-
-# Allow HTTP and HTTPS
-ufw allow 3000/tcp
-
-# Enable firewall
+ufw allow 53/tcp
+ufw allow 53/udp
 echo "y" | ufw enable
 
-echo -e "${YELLOW}Step 9: Setting up firewall rules for production...${NC}"
-echo "For production, consider using nginx as a reverse proxy:"
-echo "  - Install nginx: apt-get install -y nginx"
-echo "  - Configure SSL/TLS with Let's Encrypt"
-echo "  - Update UFW: ufw allow 'Nginx Full'"
-
-echo -e "${YELLOW}Step 10: Starting the service...${NC}"
-# Reload systemd
-systemctl daemon-reload
-
-# Enable and start the service
-systemctl enable jwt-auth-api
-systemctl start jwt-auth-api
-
-# Check status
-systemctl status jwt-auth-api
-
 echo ""
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  Setup Complete!${NC}"
+echo -e "${GREEN}  BIND9 Setup Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "API Server: http://YOUR_VM_IP:3000"
-echo -e "Health Check: http://YOUR_VM_IP:3000/health"
-echo -e "API Docs: http://YOUR_VM_IP:3000/"
+echo -e "${BLUE}DNS Server:${NC} ${DNS_SERVER_NAME} (${DNS_SERVER_IP})"
+echo -e "${BLUE}Zone:${NC} ${ZONE_NAME}"
 echo ""
-echo -e "${YELLOW}Test Users:${NC}"
-echo -e "  Username: testuser | Password: test123 | Role: user"
-echo -e "  Username: admin    | Password: admin123 | Role: admin"
+echo -e "${YELLOW}DNS Records Configured:${NC}"
+echo -e "  ${WEB_URL} -> ${WEB_SERVER_IP}"
+echo -e "  ${WWW_URL} -> ${WEB_URL} (CNAME)"
+echo -e "  ${DNS_SERVER_NAME} -> ${DNS_SERVER_IP}"
 echo ""
 echo -e "${YELLOW}Useful Commands:${NC}"
-echo -e "  View logs:     journalctl -u jwt-auth-api -f"
-echo -e "  Stop service:  systemctl stop jwt-auth-api"
-echo -e "  Restart:       systemctl restart jwt-auth-api"
-echo -e "  Check status:  systemctl status jwt-auth-api"
+echo -e "  Check status:  systemctl status bind9"
+echo -e "  View logs:     journalctl -u bind9 -f"
+echo -e "  Test DNS:      dig @${DNS_SERVER_IP} ${WEB_URL}"
+echo -e "  Restart:       systemctl restart bind9"
 echo ""
-echo -e "${YELLOW}Configuration File:${NC}"
-echo -e "  $PROJECT_DIR/backend/.env"
+echo -e "${RED}IMPORTANT - Post-Setup Configuration:${NC}"
+echo -e "  1. Add forwarders to /etc/bind/named.conf.options"
+echo -e "  2. Ask school IT for their DNS server IP and add it"
+echo -e "  3. Test from another machine:"
+echo -e "     dig @10.12.2.10 ${WEB_URL}"
+echo -e "     dig @10.12.2.10 ${WWW_URL}"
 echo ""
 

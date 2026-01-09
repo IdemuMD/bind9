@@ -1,0 +1,20 @@
+//
+// Do any local configuration here
+//
+
+// Zone: ikt-fag.no (master)
+zone "ikt-fag.no" {
+    type master;
+    file "/var/lib/bind/ikt-fag.no.db";
+    allow-transfer { none; };
+    allow-update { none; };
+};
+
+// Reverse zone for 10.12.2.0/24
+zone "2.12.10.in-addr.arpa" {
+    type master;
+    file "/var/lib/bind/2.12.10.in-addr.arpa.db";
+    allow-transfer { none; };
+    allow-update { none; };
+};
+
