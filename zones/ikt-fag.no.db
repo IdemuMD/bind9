@@ -1,0 +1,22 @@
+;
+; BIND9 Zone file for ikt-fag.no
+;
+$TTL 86400
+@       IN      SOA     ns2.ikt-fag.no. admin.ikt-fag.no. (
+                        2024011501  ; Serial
+                        3600        ; Refresh (1 hour)
+                        1800        ; Retry (30 minutes)
+                        604800      ; Expire (1 week)
+                        86400 )     ; Minimum TTL (1 day)
+
+; Name servers
+@       IN      NS      ns2.ikt-fag.no.
+
+; A records
+@       IN      A       10.12.2.10
+ns2     IN      A       10.12.2.10
+guide   IN      A       10.12.2.106
+
+; CNAME records
+www     IN      CNAME   guide.ikt-fag.no.
+
